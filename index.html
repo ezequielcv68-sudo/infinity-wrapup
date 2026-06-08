@@ -648,7 +648,7 @@
       <div id="env-list">
         <div class="sidebar-empty">Conecta tu Postman API Key para ver tus environments.</div>
       </div>
-      <button class="refresh-btn" onclick="loadEnvironments()" id="refresh-btn" style="display:none;">
+      <button class="refresh-btn" onclick="syncEnvironments()" id="refresh-btn" style="display:none;">
         ↻ Sincronizar
       </button>
     </div>
@@ -806,6 +806,7 @@
     showModalStatus('loading', 'Verificando y cargando environments...');
 
     try {
+      // 1. Obtener lista de environments
       const res = await fetch('https://api.getpostman.com/environments', {
         headers: { 'X-Api-Key': key }
       });
@@ -814,19 +815,61 @@
       if (!res.ok) return showModalStatus('error', `Error ${res.status} al conectar con Postman.`);
 
       const data = await res.json();
+      const envList = data.environments || [];
+
+      showModalStatus('loading', `Cargando variables de ${envList.length} environments...`);
+
+      // 2. Para cada environment, obtener su detalle completo con variables
+      const detailed = [];
+      for (const env of envList) {
+        try {
+          const detRes = await fetch(`https://api.getpostman.com/environments/${env.uid}`, {
+            headers: { 'X-Api-Key': key }
+          });
+          const detData = await detRes.json();
+          const vars = (detData.environment?.values || []).filter(v => v.value);
+          detailed.push({ ...env, vars });
+        } catch(e) {
+          detailed.push({ ...env, vars: [] });
+        }
+      }
+
+      // 3. Guardar todo en localStorage (ya no necesitamos llamar a la API otra vez)
       apiKey = key;
       localStorage.setItem('pm_api_key', key);
+      localStorage.setItem('pm_environments', JSON.stringify(detailed));
+
       markConnected();
       closeModal();
-      renderEnvironments(data.environments || []);
+      renderEnvironments(detailed);
 
     } catch(e) {
       showModalStatus('error', 'Error de red al conectar con Postman API. Revisa tu conexión.');
     }
   }
 
+  async function syncEnvironments() {
+    // Fuerza resincronización borrando caché y reconectando
+    localStorage.removeItem('pm_environments');
+    openModal();
+    document.getElementById('modal-status').className = 'status-bar visible loading';
+    document.getElementById('modal-status').textContent = 'Borra tu API Key y vuelve a ingresarla para re-sincronizar environments.';
+  }
+
   async function loadEnvironments() {
     if (!apiKey) return;
+
+    // Primero intentar desde localStorage (sin CORS)
+    const cached = localStorage.getItem('pm_environments');
+    if (cached) {
+      try {
+        const envs = JSON.parse(cached);
+        renderEnvironments(envs);
+        return;
+      } catch(e) {}
+    }
+
+    // Si no hay caché, llamar a la API (solo funciona en conexión inicial)
     try {
       const res = await fetch('https://api.getpostman.com/environments', {
         headers: { 'X-Api-Key': apiKey }
@@ -861,7 +904,7 @@
     });
   }
 
-  async function selectEnvByUid(uid) {
+  function selectEnvByUid(uid) {
     const env = environments.find(e => e.uid === uid);
     if (!env) return;
     document.querySelectorAll('.env-item').forEach(el => el.classList.remove('active'));
@@ -872,42 +915,28 @@
     document.getElementById('env-name-display').textContent = env.name;
     document.getElementById('env-name-display').style.color = 'var(--text)';
 
-    // Mostrar loading en tenant url
+    // Usar vars ya cargadas en memoria — sin llamada a API, sin CORS
     const tenantEl = document.getElementById('tenant-url-text');
-    tenantEl.style.color = 'var(--muted)';
-    tenantEl.textContent = 'Cargando variables...';
+    const vars = env.vars || [];
+    selectedEnv = { ...env, tenantUrl: '', allVars: vars };
 
-    try {
-      const res = await fetch(`https://api.getpostman.com/environments/${env.uid}`, {
-        headers: { 'X-Api-Key': apiKey }
-      });
-      const data = await res.json();
-      const vars = (data.environment?.values || []).filter(v => v.value);
+    // Búsqueda exacta primero, luego parcial
+    const exact = (k) => k.toLowerCase() === 'tenanturl' || k.toLowerCase() === 'tenant_url';
+    const partial = (k) => k.toLowerCase().includes('baseurl') || k.toLowerCase().includes('base_url') || k.toLowerCase().includes('fqdn');
 
-      selectedEnv.allVars = vars;
+    let tenantVar = vars.find(v => exact(v.key));
+    if (!tenantVar) tenantVar = vars.find(v => partial(v.key));
 
-      // Buscar TenantURL con varios nombres posibles
-      const tenantVar = vars.find(v =>
-        v.key.toLowerCase().includes('tenanturl') ||
-        v.key.toLowerCase().includes('tenant_url') ||
-        v.key.toLowerCase().includes('baseurl') ||
-        v.key.toLowerCase().includes('base_url') ||
-        v.key.toLowerCase().includes('fqdn') ||
-        v.key.toLowerCase().includes('host')
-      );
-
-      if (tenantVar) {
-        selectedEnv.tenantUrl = tenantVar.value.replace(/^https?:\/\//, '').replace(/\/$/, '');
-        tenantEl.textContent = selectedEnv.tenantUrl;
-        tenantEl.style.color = 'var(--accent)';
-        updatePreview();
-      } else {
-        // No se encontró auto — mostrar selector de variable + input manual
-        showTenantSelector(vars, tenantEl);
-      }
-
-    } catch(e) {
-      // CORS bloqueó el detalle del environment — mostrar input manual directo
+    if (tenantVar) {
+      selectedEnv.tenantUrl = tenantVar.value.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      tenantEl.textContent = selectedEnv.tenantUrl;
+      tenantEl.style.color = 'var(--accent)';
+      updatePreview();
+    } else if (vars.length > 0) {
+      // Mostrar dropdown con todas las variables disponibles para elegir cuál es el TenantURL
+      showTenantSelector(vars, tenantEl);
+    } else {
+      // Sin variables — input manual
       tenantEl.style.color = 'var(--warn)';
       tenantEl.innerHTML = `<input type="text" id="manual-tenant"
         placeholder="core.micliente.ec.avayacloud.com"
@@ -1129,3 +1158,4 @@
 </script>
 </body>
 </html>
+
