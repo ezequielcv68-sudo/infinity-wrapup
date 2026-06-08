@@ -1,4 +1,4 @@
-[source: 2]<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -834,7 +834,7 @@
         }
       }
 
-      // 3. Guardar todo en localStorage (ya no necesitamos llamar a la API otra vez)
+      // 3. Guardar todo en localStorage
       apiKey = key;
       localStorage.setItem('pm_api_key', key);
       localStorage.setItem('pm_environments', JSON.stringify(detailed));
@@ -849,17 +849,17 @@
   }
 
   async function syncEnvironments() {
-    // Fuerza resincronización borrando caché y reconectando
+    // ELIMINA LA MEMORIA CACHÉ ANTERIOR PARA ELIMINAR LOS DATOS VIEJOS TRABADOS
     localStorage.removeItem('pm_environments');
     openModal();
     document.getElementById('modal-status').className = 'status-bar visible loading';
-    document.getElementById('modal-status').textContent = 'Borra tu API Key y vuelve a ingresarla para re-sincronizar environments.';
+    document.getElementById('modal-status').textContent = 'Por favor, haz clic en el botón "Conectar" para forzar la descarga limpia de tus variables de Postman.';
   }
 
   async function loadEnvironments() {
     if (!apiKey) return;
 
-    // Primero intentar desde localStorage (sin CORS)
+    // Primero intentar desde localStorage
     const cached = localStorage.getItem('pm_environments');
     if (cached) {
       try {
@@ -869,7 +869,7 @@
       } catch(e) {}
     }
 
-    // Si no hay caché, llamar a la API (solo funciona en conexión inicial)
+    // Si no hay caché, llamar a la API
     try {
       const res = await fetch('https://api.getpostman.com/environments', {
         headers: { 'X-Api-Key': apiKey }
@@ -915,12 +915,12 @@
     document.getElementById('env-name-display').textContent = env.name;
     document.getElementById('env-name-display').style.color = 'var(--text)';
 
-    // Usar vars ya cargadas en memoria — sin llamada a API, sin CORS
+    // Usar vars ya cargadas en memoria local
     const tenantEl = document.getElementById('tenant-url-text');
     const vars = env.vars || [];
     selectedEnv = { ...env, tenantUrl: '', allVars: vars };
 
-    // Búsqueda exacta primero, luego parcial
+    // Búsqueda estricta primero, luego parcial
     const exact = (k) => k.toLowerCase() === 'tenanturl' || k.toLowerCase() === 'tenant_url';
     const partial = (k) => k.toLowerCase().includes('baseurl') || k.toLowerCase().includes('base_url') || k.toLowerCase().includes('fqdn');
 
@@ -1158,3 +1158,4 @@
 </script>
 </body>
 </html>
+
