@@ -801,16 +801,91 @@
   }
 
   async function connectPostman() {
-    const key = document.getElementById('api-key-input').value.trim();
-    if (!key) return showModalStatus('error', 'Ingresa tu API Key de Postman.');
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key) return showModalStatus('error', 'Ingresa tu API Key de Postman.');
 
-    showModalStatus('loading', 'Verificando y cargando environments...');
+  showModalStatus('loading', 'Verificando y cargando environments...');
 
-    try {
-      // 1. Obtener lista de environments
-      const res = await fetch('https://api.getpostman.com/environments', {
-        headers: { 'X-Api-Key': key }
-      });
+  try {
+    // 1. Obtener lista de environments
+    const res = await fetch('https://api.getpostman.com/environments', {
+      headers: { 'X-Api-Key': key }
+    });
+
+    if (res.status === 401) return showModalStatus('error', 'API Key inválida. Verifica que sea correcta y tenga permisos.');
+    if (!res.ok) return showModalStatus('error', `Error ${res.status} al conectar con Postman.`);
+
+    const data = await res.json();
+    const envList = data.environments || [];
+
+    showModalStatus('loading', `Cargando variables de ${envList.length} environments...`);
+
+    // 2. Para cada environment, obtener su detalle completo con variables
+    const detailed = [];
+    for (let i = 0; i < envList.length; i++) {
+      const env = envList[i];
+      try {
+        // 🔧 FIX: Esperar 200ms entre requests para evitar race conditions
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        const detRes = await fetch(`https://api.getpostman.com/environments/${env.uid}`, {
+          headers: { 'X-Api-Key': key }
+        });
+        
+        if (!detRes.ok) {
+          console.warn(`⚠️ Error cargando ${env.name} (${env.uid}): ${detRes.status}`);
+          detailed.push({ ...env, vars: [] });
+          continue;
+        }
+        
+        const detData = await detRes.json();
+        const vars = (detData.environment?.values || [])
+          .filter(v => v.value && v.key)  // Validar key y value
+          .map(v => ({ key: v.key, value: v.value }));  // Mapeo explícito
+        
+        const envWithVars = { 
+          uid: env.uid,
+          name: env.name, 
+          vars 
+        };
+        
+        console.log(`✅ Cargado: ${env.name} (${env.uid}) - ${vars.length} variables`);
+        console.log(`   Variables:`, vars.map(v => `${v.key}=${v.value.substring(0,50)}`).join(', '));
+        
+        detailed.push(envWithVars);
+        
+      } catch(e) {
+        console.error(`❌ Error cargando ${env.name}:`, e);
+        detailed.push({ ...env, vars: [] });
+      }
+    }
+
+    // 3. Guardar indexado por uid en localStorage
+    apiKey = key;
+    localStorage.setItem('pm_api_key', key);
+
+    // 🔧 FIX: Guardar como diccionario uid->env de forma segura
+    const envDict = {};
+    detailed.forEach(e => {
+      envDict[e.uid] = { uid: e.uid, name: e.name, vars: e.vars };
+      console.log(`📦 Guardando en envDict[${e.uid}]:`, envDict[e.uid]);
+    });
+    
+    localStorage.setItem('pm_env_dict', JSON.stringify(envDict));
+    localStorage.setItem('pm_env_list', JSON.stringify(detailed.map(e => ({uid: e.uid, name: e.name}))));
+
+    console.log('🎯 envDict completo:', envDict);
+    console.log('🎯 localStorage guardado correctamente');
+
+    markConnected();
+    closeModal();
+    loadEnvMapAndRender(detailed);
+
+  } catch(e) {
+    console.error('Error de red:', e);
+    showModalStatus('error', 'Error de red al conectar con Postman API. Revisa tu conexión.');
+  }
+}
 
       if (res.status === 401) return showModalStatus('error', 'API Key inválida. Verifica que sea correcta y tenga permisos.');
       if (!res.ok) return showModalStatus('error', `Error ${res.status} al conectar con Postman.`);
