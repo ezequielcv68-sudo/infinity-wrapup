@@ -778,7 +778,8 @@
 
 <script>
   let apiKey = localStorage.getItem('pm_api_key') || '';
-  let environments = [];
+  let environments = [];   // array ordenado para el sidebar
+  let envMap = {};         // diccionario uid -> environment completo con vars
   let selectedEnv = null;
   let history = [];
   let batchMode = false;
@@ -834,14 +835,19 @@
         }
       }
 
-      // 3. Guardar todo en localStorage
+      // 3. Guardar indexado por uid en localStorage
       apiKey = key;
       localStorage.setItem('pm_api_key', key);
-      localStorage.setItem('pm_environments', JSON.stringify(detailed));
+
+      // Guardar como diccionario uid->env para acceso exacto sin riesgo de cruce
+      const envDict = {};
+      detailed.forEach(e => { envDict[e.uid] = e; });
+      localStorage.setItem('pm_env_dict', JSON.stringify(envDict));
+      localStorage.setItem('pm_env_list', JSON.stringify(detailed.map(e => ({uid: e.uid, name: e.name}))));
 
       markConnected();
       closeModal();
-      renderEnvironments(detailed);
+      loadEnvMapAndRender(detailed);
 
     } catch(e) {
       showModalStatus('error', 'Error de red al conectar con Postman API. Revisa tu conexión.');
@@ -849,35 +855,48 @@
   }
 
   async function syncEnvironments() {
-    // ELIMINA LA MEMORIA CACHÉ ANTERIOR PARA ELIMINAR LOS DATOS VIEJOS TRABADOS
+    // Fuerza resincronización borrando caché completo y reconectando
     localStorage.removeItem('pm_environments');
+    localStorage.removeItem('pm_env_dict');
+    localStorage.removeItem('pm_env_list');
+    envMap = {};
+    environments = [];
     openModal();
     document.getElementById('modal-status').className = 'status-bar visible loading';
-    document.getElementById('modal-status').textContent = 'Por favor, haz clic en el botón "Conectar" para forzar la descarga limpia de tus variables de Postman.';
+    document.getElementById('modal-status').textContent = 'Borra tu API Key y vuelve a ingresarla para re-sincronizar environments.';
+  }
+
+  function loadEnvMapAndRender(detailed) {
+    // Construir envMap en memoria desde array detallado
+    envMap = {};
+    detailed.forEach(e => { envMap[e.uid] = e; });
+    environments = detailed;
+    renderEnvironments(detailed);
   }
 
   async function loadEnvironments() {
     if (!apiKey) return;
 
-    // Primero intentar desde localStorage
-    const cached = localStorage.getItem('pm_environments');
-    if (cached) {
+    // Cargar desde localStorage usando el diccionario indexado por uid
+    const dictStr = localStorage.getItem('pm_env_dict');
+    const listStr = localStorage.getItem('pm_env_list');
+    if (dictStr && listStr) {
       try {
-        const envs = JSON.parse(cached);
-        renderEnvironments(envs);
+        envMap = JSON.parse(dictStr);
+        const list = JSON.parse(listStr);
+        // Reconstruir array con datos completos desde el dict, en el orden del list
+        environments = list.map(e => envMap[e.uid]).filter(Boolean);
+        renderEnvironments(environments);
         return;
-      } catch(e) {}
+      } catch(e) {
+        console.warn('Error leyendo caché:', e);
+      }
     }
 
-    // Si no hay caché, llamar a la API
-    try {
-      const res = await fetch('https://api.getpostman.com/environments', {
-        headers: { 'X-Api-Key': apiKey }
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      renderEnvironments(data.environments || []);
-    } catch(e) {}
+    // Sin caché — pedir al usuario que reconecte
+    openModal();
+    document.getElementById('modal-status').className = 'status-bar visible warn';
+    document.getElementById('modal-status').textContent = 'Ingresa tu API Key para cargar los environments.';
   }
 
   function renderEnvironments(envs) {
@@ -905,27 +924,37 @@
   }
 
   function selectEnvByUid(uid) {
-    const env = environments.find(e => e.uid === uid);
-    if (!env) return;
+    // Acceso DIRECTO por uid — imposible cruzar environments
+    const env = envMap[uid];
+    if (!env) { console.error('uid no encontrado:', uid); return; }
+
     document.querySelectorAll('.env-item').forEach(el => el.classList.remove('active'));
-    const el = document.getElementById('env-item-' + uid);
-    if (el) el.classList.add('active');
-    selectedEnv = { ...env, tenantUrl: '', allVars: [] };
+    const domEl = document.getElementById('env-item-' + uid);
+    if (domEl) domEl.classList.add('active');
+
+    const vars = env.vars || [];
+    selectedEnv = { ...env, tenantUrl: '', allVars: vars };
 
     document.getElementById('env-name-display').textContent = env.name;
     document.getElementById('env-name-display').style.color = 'var(--text)';
 
-    // Usar vars ya cargadas en memoria local
     const tenantEl = document.getElementById('tenant-url-text');
-    const vars = env.vars || [];
-    selectedEnv = { ...env, tenantUrl: '', allVars: vars };
 
-    // Búsqueda estricta primero, luego parcial
-    const exact = (k) => k.toLowerCase() === 'tenanturl' || k.toLowerCase() === 'tenant_url';
-    const partial = (k) => k.toLowerCase().includes('baseurl') || k.toLowerCase().includes('base_url') || k.toLowerCase().includes('fqdn');
+    console.log('Env:', env.name, '| vars:', vars.map(v=>v.key+'='+v.value).join(', '));
 
-    let tenantVar = vars.find(v => exact(v.key));
-    if (!tenantVar) tenantVar = vars.find(v => partial(v.key));
+    // Búsqueda exacta primero, luego parcial
+    let tenantVar = vars.find(v => v.key.toLowerCase() === 'tenanturl' || v.key.toLowerCase() === 'tenant_url');
+    if (!tenantVar) tenantVar = vars.find(v =>
+      v.key.toLowerCase().includes('baseurl') ||
+      v.key.toLowerCase().includes('base_url') ||
+      v.key.toLowerCase().includes('fqdn')
+    );
+
+    // Mostrar TenantID también si existe
+    const tenantIdVar = vars.find(v => v.key.toLowerCase() === 'tenantid' || v.key.toLowerCase() === 'tenant_id');
+    if (tenantIdVar) {
+      document.getElementById('env-name-display').textContent = env.name + '  |  ID: ' + tenantIdVar.value;
+    }
 
     if (tenantVar) {
       selectedEnv.tenantUrl = tenantVar.value.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -933,15 +962,12 @@
       tenantEl.style.color = 'var(--accent)';
       updatePreview();
     } else if (vars.length > 0) {
-      // Mostrar dropdown con todas las variables disponibles para elegir cuál es el TenantURL
       showTenantSelector(vars, tenantEl);
     } else {
-      // Sin variables — input manual
       tenantEl.style.color = 'var(--warn)';
       tenantEl.innerHTML = `<input type="text" id="manual-tenant"
         placeholder="core.micliente.ec.avayacloud.com"
-        style="background:transparent; border:none; outline:none; font-family:var(--mono);
-        font-size:12px; color:var(--accent); width:100%;"
+        style="background:transparent;border:none;outline:none;font-family:var(--mono);font-size:12px;color:var(--accent);width:100%;"
         oninput="setTenantManual(this.value)" />`;
       setTimeout(() => document.getElementById('manual-tenant')?.focus(), 50);
     }
@@ -1158,4 +1184,5 @@
 </script>
 </body>
 </html>
+
 
