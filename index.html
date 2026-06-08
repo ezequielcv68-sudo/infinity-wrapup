@@ -847,19 +847,26 @@
       return;
     }
 
-    list.innerHTML = envs.map((e, i) =>
-      `<div class="env-item" onclick="selectEnv(${i})" id="env-item-${i}">
+    list.innerHTML = envs.map((e) =>
+      `<div class="env-item" data-uid="${e.uid}" id="env-item-${e.uid}">
         <div class="env-dot"></div>
         <span class="env-name">${e.name}</span>
       </div>`
     ).join('');
+
+    list.querySelectorAll('.env-item').forEach(el => {
+      el.addEventListener('click', function() {
+        selectEnvByUid(this.dataset.uid);
+      });
+    });
   }
 
-  async function selectEnv(i) {
+  async function selectEnvByUid(uid) {
+    const env = environments.find(e => e.uid === uid);
+    if (!env) return;
     document.querySelectorAll('.env-item').forEach(el => el.classList.remove('active'));
-    document.getElementById('env-item-' + i).classList.add('active');
-
-    const env = environments[i];
+    const el = document.getElementById('env-item-' + uid);
+    if (el) el.classList.add('active');
     selectedEnv = { ...env, tenantUrl: '', allVars: [] };
 
     document.getElementById('env-name-display').textContent = env.name;
