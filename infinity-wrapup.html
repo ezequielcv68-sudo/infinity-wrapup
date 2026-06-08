@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Infinity — Force Wrapup Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f12;
+    --bg2: #13161b;
+    --bg3: #1a1e25;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8eaed;
+    --muted: #6b7280;
+    --accent: #00d4aa;
+    --accent2: #0099ff;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --success: #10b981;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* GRID LAYOUT */
+  .app {
+    display: grid;
+    grid-template-rows: 56px 1fr;
+    grid-template-columns: 260px 1fr;
+    min-height: 100vh;
+  }
+
+  /* TOPBAR */
+  .topbar {
+    grid-column: 1 / -1;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 16px;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-dot {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .api-key-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .api-key-pill:hover { border-color: var(--accent); color: var(--text); }
+  .api-key-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .api-key-pill.connected .dot { background: var(--success); }
+  .api-key-pill.connected { color: var(--text); }
+
+  /* SIDEBAR */
+  .sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    overflow-y: auto;
+  }
+
+  .sidebar-section {
+    padding: 0 16px;
+    margin-bottom: 24px;
+  }
+
+  .sidebar-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding: 0 4px;
+  }
+
+  .env-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border: 1px solid transparent;
+  }
+
+  .env-item:hover { background: var(--bg3); }
+
+  .env-item.active {
+    background: rgba(0, 212, 170, 0.08);
+    border-color: rgba(0, 212, 170, 0.2);
+  }
+
+  .env-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .env-item.active .env-dot { background: var(--accent); }
+
+  .env-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .env-item.active .env-name { color: var(--text); }
+
+  .env-count {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--bg3);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  .refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.2s;
+    margin-top: 8px;
+  }
+
+  .refresh-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .sidebar-empty {
+    padding: 10px;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* MAIN CONTENT */
+  .main {
+    padding: 32px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+  }
+
+  .card-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* TENANT URL DISPLAY */
+  .tenant-display {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tenant-display .prefix { color: var(--muted); }
+
+  /* INPUT FIELDS */
+  .field { margin-bottom: 16px; }
+
+  .field label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .field input, .field textarea {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 9px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .field input:focus, .field textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .field input::placeholder, .field textarea::placeholder {
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  .field textarea { resize: vertical; min-height: 72px; }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* REQUEST PREVIEW */
+  .req-preview {
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .req-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .method-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(245,158,11,0.15);
+    color: var(--warn);
+    border: 1px solid rgba(245,158,11,0.3);
+    flex-shrink: 0;
+  }
+
+  .req-url {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .req-url .url-id { color: var(--accent2); }
+
+  .req-body {
+    padding: 12px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    white-space: pre;
+  }
+
+  .req-body .key { color: #9ca3af; }
+  .req-body .str { color: var(--accent); }
+  .req-body .str-fixed { color: var(--success); }
+
+  /* SEND BUTTON */
+  .send-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+    letter-spacing: 0.04em;
+  }
+
+  .send-btn:hover { background: #00f0c4; transform: translateY(-1px); }
+  .send-btn:active { transform: translateY(0); }
+  .send-btn:disabled { background: var(--bg3); color: var(--muted); cursor: not-allowed; transform: none; }
+
+  /* BATCH AREA */
+  .batch-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 8px 0;
+    user-select: none;
+  }
+
+  .batch-toggle:hover { color: var(--text); }
+
+  .toggle-switch {
+    width: 32px; height: 18px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 9px;
+    position: relative;
+    transition: background 0.2s;
+  }
+
+  .toggle-switch::after {
+    content: '';
+    width: 12px; height: 12px;
+    background: var(--muted);
+    border-radius: 50%;
+    position: absolute;
+    top: 2px; left: 2px;
+    transition: all 0.2s;
+  }
+
+  .batch-toggle.on .toggle-switch { background: rgba(0,212,170,0.2); border-color: var(--accent); }
+  .batch-toggle.on .toggle-switch::after { background: var(--accent); left: 16px; }
+
+  /* STATUS */
+  .status-bar {
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    display: none;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .status-bar.visible { display: flex; }
+
+  .status-bar.success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: var(--success); }
+  .status-bar.error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); }
+  .status-bar.loading { background: rgba(0,153,255,0.1); border: 1px solid rgba(0,153,255,0.3); color: var(--accent2); }
+  .status-bar.warn { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); color: var(--warn); }
+
+  .status-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+  /* RESPONSE */
+  .response-block {
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    display: none;
+  }
+
+  .response-block.visible { display: block; }
+
+  /* HISTORY TABLE */
+  .history-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .history-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .history-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    vertical-align: middle;
+  }
+
+  .history-table tr:last-child td { border-bottom: none; }
+  .history-table tr:hover td { background: var(--bg3); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .badge-ok { background: rgba(16,185,129,0.15); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+  .badge-err { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+  .badge-cors { background: rgba(245,158,11,0.15); color: var(--warn); border: 1px solid rgba(245,158,11,0.3); }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 28px;
+    width: 480px;
+    max-width: 90vw;
+  }
+
+  .modal h2 {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .modal p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .modal p a { color: var(--accent2); text-decoration: none; }
+  .modal p a:hover { text-decoration: underline; }
+
+  .modal-btns {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  .btn-primary {
+    flex: 1;
+    padding: 10px;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-primary:hover { background: #00f0c4; }
+
+  .btn-secondary {
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover { border-color: var(--border2); color: var(--text); }
+
+  /* SPINNER */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  .send-btn.loading .spinner { display: block; }
+  .send-btn.loading .btn-label { display: none; }
+
+  /* EMPTY HISTORY */
+  .history-empty {
+    text-align: center;
+    padding: 40px 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* CORS NOTE */
+  .cors-note {
+    background: rgba(245,158,11,0.07);
+    border: 1px solid rgba(245,158,11,0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: var(--warn);
+    line-height: 1.6;
+  }
+
+  .cors-note strong { color: var(--warn); }
+
+  /* FADE IN */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .card { animation: fadeIn 0.3s ease both; }
+  .card:nth-child(2) { animation-delay: 0.06s; }
+  .card:nth-child(3) { animation-delay: 0.12s; }
+  .card:nth-child(4) { animation-delay: 0.18s; }
+
+  /* COPY BTN */
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-left: auto;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      INFINITY / FORCE WRAPUP
+    </div>
+    <div style="font-size:12px; color:var(--muted); font-family:var(--mono);">v1.0 — SDS Tool</div>
+    <div class="topbar-right">
+      <div class="api-key-pill" id="api-key-pill" onclick="openModal()">
+        <div class="dot" id="conn-dot"></div>
+        <span id="conn-label">Conectar Postman API</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Environments</div>
+      <div id="env-list">
+        <div class="sidebar-empty">Conecta tu Postman API Key para ver tus environments.</div>
+      </div>
+      <button class="refresh-btn" onclick="loadEnvironments()" id="refresh-btn" style="display:none;">
+        ↻ Sincronizar
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Historial</div>
+      <div id="hist-summary" style="font-size:12px; color:var(--muted); padding: 0 4px;">
+        — sin requests
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ENV SELECTED INFO -->
+    <div class="card" id="card-env">
+      <div class="card-title">Ambiente activo</div>
+      <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+        <div style="flex:1;">
+          <div style="font-size:12px; color:var(--muted); margin-bottom:6px; font-family:var(--mono);">TENANT URL</div>
+          <div class="tenant-display" id="tenant-display">
+            <span class="prefix">https://</span>
+            <span id="tenant-url-text" style="color:var(--muted);">— selecciona un environment</span>
+          </div>
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:12px; color:var(--muted); margin-bottom:6px; font-family:var(--mono);">ENVIRONMENT</div>
+          <div class="tenant-display">
+            <span id="env-name-display" style="color:var(--muted);">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REQUEST FORM -->
+    <div class="card">
+      <div class="card-title">Datos del request</div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Interaction ID</label>
+          <input type="text" id="interaction-id" placeholder="004d010608cff1a9d143152102" oninput="updatePreview()" />
+        </div>
+        <div class="field">
+          <label>Cookie de sesión</label>
+          <input type="text" id="cookie-val" placeholder="__Secure-session=E2ZAyC4..." oninput="updatePreview()" />
+        </div>
+      </div>
+
+      <div class="batch-toggle" id="batch-toggle" onclick="toggleBatch()">
+        <div class="toggle-switch"></div>
+        Modo batch — cerrar múltiples IDs de una vez
+      </div>
+
+      <div id="batch-area" style="display:none; margin-top:12px;">
+        <div class="field">
+          <label>Interaction IDs (uno por línea)</label>
+          <textarea id="batch-ids" placeholder="004d010608cff1a9d143152102&#10;004d010608cff1a9d143152103&#10;004d010608cff1a9d143152104"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- REQUEST PREVIEW -->
+    <div class="card">
+      <div class="card-title">Request preview</div>
+      <div class="req-preview">
+        <div class="req-line">
+          <span class="method-tag">PUT</span>
+          <span class="req-url" id="preview-url">
+            https://<span style="color:var(--muted);">{tenantURL}</span>/api/core/v4/interactions/<span class="url-id">{id}</span>
+          </span>
+          <button class="copy-btn" onclick="copyUrl()">copiar</button>
+        </div>
+        <div class="req-body" id="preview-body"><span class="key">{
+  "id":</span> <span class="str" id="preview-id">"..."</span><span class="key">,
+  "status":</span> <span class="str-fixed">"completed"</span>
+<span class="key">}</span></div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <button class="send-btn" id="send-btn" onclick="sendRequest()">
+          <div class="spinner"></div>
+          <span class="btn-label">⟶ Ejecutar Force Wrapup</span>
+        </button>
+      </div>
+
+      <div class="status-bar" id="status-bar" style="margin-top:12px;"></div>
+      <div class="response-block" id="response-block"></div>
+    </div>
+
+    <!-- CORS NOTE -->
+    <div class="cors-note">
+      <strong>⚠ Nota CORS:</strong> Los browsers bloquean requests a APIs externas por política de seguridad. Si ves un error de red, instala el <strong>Postman Desktop Agent</strong> y actívalo — actúa como proxy local y resuelve el problema automáticamente. También puedes hospedar esta app en un servidor de tu red interna.
+    </div>
+
+    <!-- HISTORY -->
+    <div class="card">
+      <div class="card-title">Historial de requests</div>
+      <div id="history-container">
+        <div class="history-empty">Los requests ejecutados aparecerán aquí.</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2>Conectar Postman API Key</h2>
+    <p>
+      Genera tu API Key en <a href="https://web.postman.com/settings/me/api-keys" target="_blank">postman.com → Settings → API Keys</a>.<br>
+      Con ella la app cargará tus environments automáticamente y los sincronizará cada vez que abras la app.
+    </p>
+    <div class="field">
+      <label>API Key de Postman</label>
+      <input type="password" id="api-key-input" placeholder="PMAK-xxxxxxxxxxxxxxxxxxxxxxxx" />
+    </div>
+    <div class="modal-btns">
+      <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn-primary" onclick="connectPostman()">Conectar y cargar environments</button>
+    </div>
+    <div class="status-bar" id="modal-status" style="margin-top:14px;"></div>
+  </div>
+</div>
+
+<script>
+  let apiKey = localStorage.getItem('pm_api_key') || '';
+  let environments = [];
+  let selectedEnv = null;
+  let history = [];
+  let batchMode = false;
+
+  // INIT
+  if (apiKey) {
+    markConnected();
+    loadEnvironments();
+  }
+
+  function openModal() {
+    document.getElementById('api-key-input').value = apiKey;
+    document.getElementById('modal').classList.add('visible');
+    document.getElementById('modal-status').className = 'status-bar';
+  }
+
+  function closeModal() {
+    document.getElementById('modal').classList.remove('visible');
+  }
+
+  async function connectPostman() {
+    const key = document.getElementById('api-key-input').value.trim();
+    if (!key) return showModalStatus('error', 'Ingresa tu API Key de Postman.');
+
+    showModalStatus('loading', 'Verificando y cargando environments...');
+
+    try {
+      const res = await fetch('https://api.getpostman.com/environments', {
+        headers: { 'X-Api-Key': key }
+      });
+
+      if (res.status === 401) return showModalStatus('error', 'API Key inválida. Verifica que sea correcta y tenga permisos.');
+      if (!res.ok) return showModalStatus('error', `Error ${res.status} al conectar con Postman.`);
+
+      const data = await res.json();
+      apiKey = key;
+      localStorage.setItem('pm_api_key', key);
+      markConnected();
+      closeModal();
+      renderEnvironments(data.environments || []);
+
+    } catch(e) {
+      showModalStatus('error', 'Error de red al conectar con Postman API. Revisa tu conexión.');
+    }
+  }
+
+  async function loadEnvironments() {
+    if (!apiKey) return;
+    try {
+      const res = await fetch('https://api.getpostman.com/environments', {
+        headers: { 'X-Api-Key': apiKey }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      renderEnvironments(data.environments || []);
+    } catch(e) {}
+  }
+
+  function renderEnvironments(envs) {
+    environments = envs;
+    const list = document.getElementById('env-list');
+    document.getElementById('refresh-btn').style.display = 'flex';
+
+    if (!envs.length) {
+      list.innerHTML = '<div class="sidebar-empty">No tienes environments configurados en Postman.</div>';
+      return;
+    }
+
+    list.innerHTML = envs.map((e, i) =>
+      `<div class="env-item" onclick="selectEnv(${i})" id="env-item-${i}">
+        <div class="env-dot"></div>
+        <span class="env-name">${e.name}</span>
+      </div>`
+    ).join('');
+  }
+
+  async function selectEnv(i) {
+    document.querySelectorAll('.env-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('env-item-' + i).classList.add('active');
+
+    const env = environments[i];
+    selectedEnv = env;
+
+    // Cargar detalle del environment para obtener variables
+    try {
+      const res = await fetch(`https://api.getpostman.com/environments/${env.uid}`, {
+        headers: { 'X-Api-Key': apiKey }
+      });
+      const data = await res.json();
+      const vars = data.environment?.values || [];
+      const tenantVar = vars.find(v =>
+        v.key.toLowerCase().includes('tenanturl') ||
+        v.key.toLowerCase().includes('tenant_url') ||
+        v.key.toLowerCase().includes('baseurl') ||
+        v.key.toLowerCase().includes('base_url') ||
+        v.key.toLowerCase().includes('fqdn')
+      );
+
+      const tenantUrl = tenantVar?.value || '';
+      selectedEnv.tenantUrl = tenantUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      selectedEnv.allVars = vars;
+
+    } catch(e) {
+      selectedEnv.tenantUrl = '';
+    }
+
+    document.getElementById('tenant-url-text').textContent = selectedEnv.tenantUrl || '(variable TenantURL no encontrada — ingresa manualmente)';
+    document.getElementById('tenant-url-text').style.color = selectedEnv.tenantUrl ? 'var(--accent)' : 'var(--warn)';
+    document.getElementById('env-name-display').textContent = env.name;
+    document.getElementById('env-name-display').style.color = 'var(--text)';
+
+    // Si no se encontró TenantURL, mostrar input manual
+    if (!selectedEnv.tenantUrl) {
+      document.getElementById('tenant-url-text').innerHTML = `
+        <input type="text" id="manual-tenant" placeholder="core.micliente.ec.avayacloud.com"
+          style="background:transparent; border:none; outline:none; font-family:var(--mono);
+          font-size:12px; color:var(--warn); width:100%;"
+          oninput="selectedEnv.tenantUrl=this.value.replace(/^https?:\\/\\//,'').replace(/\\/$/,''); updatePreview();" />
+      `;
+    }
+
+    updatePreview();
+  }
+
+  function markConnected() {
+    const pill = document.getElementById('api-key-pill');
+    pill.classList.add('connected');
+    document.getElementById('conn-dot').style.background = 'var(--success)';
+    document.getElementById('conn-label').textContent = 'Postman conectado ✓';
+  }
+
+  function updatePreview() {
+    const id = document.getElementById('interaction-id').value.trim() || '{id}';
+    const tenant = selectedEnv?.tenantUrl || '{tenantURL}';
+    document.getElementById('preview-url').innerHTML =
+      `https://<span style="color:var(--accent);">${tenant}</span>/api/core/v4/interactions/<span class="url-id">${id}</span>`;
+    document.getElementById('preview-id').textContent = `"${id}"`;
+  }
+
+  function toggleBatch() {
+    batchMode = !batchMode;
+    const toggle = document.getElementById('batch-toggle');
+    const area = document.getElementById('batch-area');
+    toggle.classList.toggle('on', batchMode);
+    area.style.display = batchMode ? 'block' : 'none';
+  }
+
+  function copyUrl() {
+    const id = document.getElementById('interaction-id').value.trim() || '{id}';
+    const tenant = selectedEnv?.tenantUrl || '{tenantURL}';
+    navigator.clipboard.writeText(`https://${tenant}/api/core/v4/interactions/${id}`);
+  }
+
+  async function sendRequest() {
+    const cookie = document.getElementById('cookie-val').value.trim();
+    const btn = document.getElementById('send-btn');
+
+    if (!selectedEnv?.tenantUrl) {
+      showStatus('error', '⚠ Selecciona un environment con TenantURL configurado.');
+      return;
+    }
+    if (!cookie) {
+      showStatus('error', '⚠ Ingresa la Cookie de sesión.');
+      return;
+    }
+
+    let ids = [];
+    if (batchMode) {
+      ids = document.getElementById('batch-ids').value.split('\n').map(s => s.trim()).filter(Boolean);
+      if (!ids.length) { showStatus('error', '⚠ Ingresa al menos un Interaction ID en el área batch.'); return; }
+    } else {
+      const id = document.getElementById('interaction-id').value.trim();
+      if (!id) { showStatus('error', '⚠ Ingresa el Interaction ID.'); return; }
+      ids = [id];
+    }
+
+    btn.classList.add('loading');
+    btn.disabled = true;
+    showStatus('loading', `⟳ Ejecutando ${ids.length > 1 ? ids.length + ' requests' : 'request'}...`);
+
+    let ok = 0, fail = 0;
+    for (const id of ids) {
+      const url = `https://${selectedEnv.tenantUrl}/api/core/v4/interactions/${id}`;
+      const ts = new Date();
+      let code = null, respText = '', success = false;
+
+      try {
+        const res = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Cookie': cookie
+          },
+          body: JSON.stringify({ id, status: 'completed' })
+        });
+        code = res.status;
+        respText = await res.text();
+        try { respText = JSON.stringify(JSON.parse(respText), null, 2); } catch(e) {}
+        success = res.ok;
+        if (success) ok++; else fail++;
+
+      } catch(e) {
+        code = 'CORS';
+        respText = 'Error de red / CORS: ' + e.message;
+        fail++;
+      }
+
+      addHistory({ id, code, success, ts, respText, env: selectedEnv.name });
+    }
+
+    btn.classList.remove('loading');
+    btn.disabled = false;
+
+    if (ids.length === 1) {
+      const h = history[0];
+      if (h.success) {
+        showStatus('success', `✓ 200 OK — Interacción cerrada correctamente.`);
+        showResponse(h.respText);
+      } else {
+        showStatus('error', `✗ Error ${h.code} — El request no fue exitoso.`);
+        showResponse(h.respText);
+      }
+    } else {
+      showStatus(fail === 0 ? 'success' : ok > 0 ? 'warn' : 'error',
+        `${ok} cerradas correctamente${fail > 0 ? ` — ${fail} con error` : ''}.`);
+    }
+  }
+
+  function showStatus(type, msg) {
+    const bar = document.getElementById('status-bar');
+    bar.className = 'status-bar visible ' + type;
+    bar.textContent = msg;
+  }
+
+  function showResponse(text) {
+    const block = document.getElementById('response-block');
+    block.textContent = text;
+    block.classList.add('visible');
+  }
+
+  function showModalStatus(type, msg) {
+    const bar = document.getElementById('modal-status');
+    bar.className = 'status-bar visible ' + type;
+    bar.textContent = msg;
+  }
+
+  function addHistory(entry) {
+    history.unshift(entry);
+    document.getElementById('hist-summary').textContent =
+      `${history.length} request${history.length !== 1 ? 's' : ''} — ${history.filter(h=>h.success).length} OK`;
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const container = document.getElementById('history-container');
+    if (!history.length) {
+      container.innerHTML = '<div class="history-empty">Los requests ejecutados aparecerán aquí.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Interaction ID</th>
+            <th>Environment</th>
+            <th>Hora</th>
+            <th>Respuesta</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${history.map((h, i) => `
+            <tr>
+              <td><span class="badge ${h.success ? 'badge-ok' : h.code === 'CORS' ? 'badge-cors' : 'badge-err'}">${h.code}</span></td>
+              <td style="font-family:var(--mono); font-size:11px; color:var(--accent2);">${h.id}</td>
+              <td style="font-size:11px;">${h.env}</td>
+              <td style="font-size:11px;">${h.ts.toLocaleTimeString('es-MX')}</td>
+              <td><button class="copy-btn" onclick="showResponse(history[${i}].respText)">ver</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // Close modal on overlay click
+  document.getElementById('modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Enter key en API key input
+  document.getElementById('api-key-input').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') connectPostman();
+  });
+</script>
+</body>
+</html>
