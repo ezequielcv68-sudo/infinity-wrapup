@@ -860,46 +860,91 @@
     document.getElementById('env-item-' + i).classList.add('active');
 
     const env = environments[i];
-    selectedEnv = env;
+    selectedEnv = { ...env, tenantUrl: '', allVars: [] };
 
-    // Cargar detalle del environment para obtener variables
+    document.getElementById('env-name-display').textContent = env.name;
+    document.getElementById('env-name-display').style.color = 'var(--text)';
+
+    // Mostrar loading en tenant url
+    const tenantEl = document.getElementById('tenant-url-text');
+    tenantEl.style.color = 'var(--muted)';
+    tenantEl.textContent = 'Cargando variables...';
+
     try {
       const res = await fetch(`https://api.getpostman.com/environments/${env.uid}`, {
         headers: { 'X-Api-Key': apiKey }
       });
       const data = await res.json();
-      const vars = data.environment?.values || [];
+      const vars = (data.environment?.values || []).filter(v => v.value);
+
+      selectedEnv.allVars = vars;
+
+      // Buscar TenantURL con varios nombres posibles
       const tenantVar = vars.find(v =>
         v.key.toLowerCase().includes('tenanturl') ||
         v.key.toLowerCase().includes('tenant_url') ||
         v.key.toLowerCase().includes('baseurl') ||
         v.key.toLowerCase().includes('base_url') ||
-        v.key.toLowerCase().includes('fqdn')
+        v.key.toLowerCase().includes('fqdn') ||
+        v.key.toLowerCase().includes('host')
       );
 
-      const tenantUrl = tenantVar?.value || '';
-      selectedEnv.tenantUrl = tenantUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      selectedEnv.allVars = vars;
+      if (tenantVar) {
+        selectedEnv.tenantUrl = tenantVar.value.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        tenantEl.textContent = selectedEnv.tenantUrl;
+        tenantEl.style.color = 'var(--accent)';
+        updatePreview();
+      } else {
+        // No se encontró auto — mostrar selector de variable + input manual
+        showTenantSelector(vars, tenantEl);
+      }
 
     } catch(e) {
-      selectedEnv.tenantUrl = '';
+      // CORS bloqueó el detalle del environment — mostrar input manual directo
+      tenantEl.style.color = 'var(--warn)';
+      tenantEl.innerHTML = `<input type="text" id="manual-tenant"
+        placeholder="core.micliente.ec.avayacloud.com"
+        style="background:transparent; border:none; outline:none; font-family:var(--mono);
+        font-size:12px; color:var(--accent); width:100%;"
+        oninput="setTenantManual(this.value)" />`;
+      setTimeout(() => document.getElementById('manual-tenant')?.focus(), 50);
     }
+  }
 
-    document.getElementById('tenant-url-text').textContent = selectedEnv.tenantUrl || '(variable TenantURL no encontrada — ingresa manualmente)';
-    document.getElementById('tenant-url-text').style.color = selectedEnv.tenantUrl ? 'var(--accent)' : 'var(--warn)';
-    document.getElementById('env-name-display').textContent = env.name;
-    document.getElementById('env-name-display').style.color = 'var(--text)';
-
-    // Si no se encontró TenantURL, mostrar input manual
-    if (!selectedEnv.tenantUrl) {
-      document.getElementById('tenant-url-text').innerHTML = `
+  function showTenantSelector(vars, tenantEl) {
+    if (vars.length > 0) {
+      // Mostrar dropdown con todas las variables disponibles
+      const options = vars.map(v =>
+        `<option value="${v.value}">${v.key} = ${v.value.substring(0,40)}${v.value.length>40?'...':''}</option>`
+      ).join('');
+      tenantEl.innerHTML = `
+        <select onchange="setTenantFromSelect(this.value)"
+          style="background:var(--bg3); border:1px solid var(--border2); border-radius:4px;
+          color:var(--warn); font-family:var(--mono); font-size:11px; padding:2px 6px; width:100%; cursor:pointer;">
+          <option value="">— selecciona la variable TenantURL —</option>
+          ${options}
+        </select>`;
+    } else {
+      // Sin variables — input manual directo
+      tenantEl.innerHTML = `
         <input type="text" id="manual-tenant" placeholder="core.micliente.ec.avayacloud.com"
           style="background:transparent; border:none; outline:none; font-family:var(--mono);
-          font-size:12px; color:var(--warn); width:100%;"
-          oninput="selectedEnv.tenantUrl=this.value.replace(/^https?:\\/\\//,'').replace(/\\/$/,''); updatePreview();" />
-      `;
+          font-size:12px; color:var(--accent); width:100%;"
+          oninput="setTenantManual(this.value)" />`;
+      tenantEl.style.color = 'var(--accent)';
     }
+  }
 
+  function setTenantFromSelect(val) {
+    if (!val) return;
+    selectedEnv.tenantUrl = val.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    document.getElementById('tenant-url-text').textContent = selectedEnv.tenantUrl;
+    document.getElementById('tenant-url-text').style.color = 'var(--accent)';
+    updatePreview();
+  }
+
+  function setTenantManual(val) {
+    selectedEnv.tenantUrl = val.replace(/^https?:\/\//, '').replace(/\/$/, '');
     updatePreview();
   }
 
