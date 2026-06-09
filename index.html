@@ -741,8 +741,8 @@
     </div>
 
     <!-- CORS NOTE -->
-    <div class="cors-note" style="background:rgba(0,153,255,0.07); border-color:rgba(0,153,255,0.2); color:var(--accent2);">
-      <strong>ℹ Modo Postman API:</strong> Los requests se ejecutan a través de los servidores de Postman — sin restricciones CORS. Requiere que tu API Key tenga permisos de escritura en environments y ejecución de collections.
+    <div class="cors-note" style="background:rgba(0,212,170,0.07); border-color:rgba(0,212,170,0.2); color:var(--accent);">
+      <strong>✓ Proxy activo:</strong> Los requests pasan por <strong>infinity-proxy.ezequielcv68.workers.dev</strong> (Cloudflare) — sin restricciones CORS, sin límites de plan.
     </div>
 
     <!-- HISTORY -->
@@ -1042,6 +1042,7 @@
   async function sendRequest() {
     const cookie = document.getElementById('cookie-val').value.trim();
     const btn = document.getElementById('send-btn');
+    const PROXY = 'https://infinity-proxy.ezequielcv68.workers.dev';
 
     if (!selectedEnv?.tenantUrl) {
       showStatus('error', '⚠ Selecciona un environment con TenantURL configurado.');
@@ -1064,7 +1065,7 @@
 
     btn.classList.add('loading');
     btn.disabled = true;
-    showStatus('loading', `⟳ Ejecutando vía Postman... (${ids.length} request${ids.length>1?'s':''})`);
+    showStatus('loading', `⟳ Ejecutando${ids.length > 1 ? ' ' + ids.length + ' requests' : ''}...`);
 
     let ok = 0, fail = 0;
 
@@ -1072,110 +1073,30 @@
       const ts = new Date();
       let code = null, respText = '', success = false;
 
+      const targetUrl = `https://${selectedEnv.tenantUrl}/api/core/v4/interactions/${id}`;
+      const proxyUrl = `${PROXY}?target=${encodeURIComponent(targetUrl)}`;
+
       try {
-        // PASO 1: Actualizar el environment en Postman con el Interaction ID y Cookie actuales
-        const envUid = selectedEnv.uid;
-        const currentVars = (selectedEnv.allVars || []).map(v => ({
-          key: v.key, value: v.value, type: 'default', enabled: true
-        }));
-
-        // Agregar/actualizar variables de sesión para este request
-        const sessionVars = [
-          { key: 'InteractionID', value: id, type: 'default', enabled: true },
-          { key: 'SessionCookie', value: cookie, type: 'default', enabled: true }
-        ];
-
-        // Merge: vars existentes + vars de sesión
-        const mergedVars = [...currentVars.filter(v =>
-          v.key !== 'InteractionID' && v.key !== 'SessionCookie'
-        ), ...sessionVars];
-
-        const envUpdateRes = await fetch(`https://api.getpostman.com/environments/${envUid}`, {
+        const res = await fetch(proxyUrl, {
           method: 'PUT',
           headers: {
-            'X-Api-Key': apiKey,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Cookie': cookie
           },
-          body: JSON.stringify({
-            environment: {
-              name: selectedEnv.name,
-              values: mergedVars
-            }
-          })
+          body: JSON.stringify({ id, status: 'completed' })
         });
 
-        if (!envUpdateRes.ok) {
-          throw new Error(`Error actualizando environment: ${envUpdateRes.status}`);
-        }
-
-        // PASO 2: Construir el request body para Postman API - ejecutar el PUT directo
-        // Usamos el endpoint de run collection pero con override del request
-        const tenantUrl = selectedEnv.tenantUrl;
-        const runUrl = `https://${tenantUrl}/api/core/v4/interactions/${id}`;
-
-        // Ejecutar via Postman Collections API - run específico
-        const runRes = await fetch(`https://api.getpostman.com/collections/55326805-5ed83e4f-4281-483c-a285-88f7ccd93f07/runs`, {
-          method: 'POST',
-          headers: {
-            'X-Api-Key': apiKey,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            collection: {
-              info: { name: 'Force Wrapup Run' },
-              item: [{
-                name: 'Force Wrapup',
-                request: {
-                  method: 'PUT',
-                  header: [
-                    { key: 'Content-Type', value: 'application/json' },
-                    { key: 'Accept', value: 'application/json' },
-                    { key: 'Cookie', value: cookie }
-                  ],
-                  url: { raw: runUrl },
-                  body: {
-                    mode: 'raw',
-                    raw: JSON.stringify({ id: id, status: 'completed' }),
-                    options: { raw: { language: 'json' } }
-                  }
-                }
-              }]
-            },
-            environment: envUid,
-            options: { followRedirects: false }
-          })
-        });
-
-        const runData = await runRes.json();
-        console.log('Run response:', JSON.stringify(runData, null, 2));
-
-        if (runData.run?.stats?.assertions?.failed === 0 ||
-            runData.run?.executions?.[0]?.response?.code === 200) {
-          code = 200;
-          respText = JSON.stringify(runData.run?.executions?.[0]?.response || runData, null, 2);
-          success = true;
-          ok++;
-        } else if (runData.run?.executions?.[0]?.response?.code) {
-          code = runData.run.executions[0].response.code;
-          respText = JSON.stringify(runData.run.executions[0], null, 2);
-          success = code >= 200 && code < 300;
-          if (success) ok++; else fail++;
-        } else {
-          // Fallback: si no hay ejecución en la respuesta, revisar si hay error de plan
-          if (runData.error) {
-            throw new Error(runData.error.message || JSON.stringify(runData.error));
-          }
-          code = runRes.status;
-          respText = JSON.stringify(runData, null, 2);
-          success = runRes.ok;
-          if (success) ok++; else fail++;
-        }
+        code = res.status;
+        const raw = await res.text();
+        try { respText = JSON.stringify(JSON.parse(raw), null, 2); } catch(e) { respText = raw; }
+        success = res.ok;
+        if (success) ok++; else fail++;
 
       } catch(e) {
         code = 'ERR';
         respText = 'Error: ' + e.message;
         fail++;
-        console.error('Error en request:', e);
       }
 
       addHistory({ id, code, success, ts, respText, env: selectedEnv.name });
@@ -1187,11 +1108,11 @@
     if (ids.length === 1) {
       const h = history[0];
       if (h.success) {
-        showStatus('success', `✓ ${h.code} — Interacción cerrada correctamente.`);
+        showStatus('success', `✓ ${h.code} OK — Interacción cerrada correctamente.`);
       } else {
-        showStatus('error', `✗ Error ${h.code} — Revisa la respuesta en el historial.`);
+        showStatus('error', `✗ Error ${h.code} — Revisa la respuesta abajo.`);
       }
-      showResponse(h.respText);
+      showResponse(history[0].respText);
     } else {
       showStatus(fail === 0 ? 'success' : ok > 0 ? 'warn' : 'error',
         `${ok} cerradas correctamente${fail > 0 ? ` — ${fail} con error` : ''}.`);
@@ -1267,4 +1188,3 @@
 </script>
 </body>
 </html>
-
